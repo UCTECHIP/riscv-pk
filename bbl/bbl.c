@@ -9,8 +9,8 @@
 #include "fdt.h"
 #include <string.h>
 
-extern char _payload_start, _payload_end; /* internal payload */
-static const void* entry_point;
+extern uint32_t _payload_start, _payload_end; /* internal payload */
+static const void* entry_point = NULL;
 long disabled_hart_mask;
 
 static uintptr_t dtb_output()
@@ -68,27 +68,32 @@ static void protect_memory(void)
   // Prevent S-mode access to our part of memory.
   extern char _ftext, _end;
   a0 = (uintptr_t)&_ftext >> PMP_SHIFT;
-  a1 = (uintptr_t)&_end >> PMP_SHIFT;
-  cfg = PMP_TOR << 8;
+  //a1 = (uintptr_t)&_end >> PMP_SHIFT;
+  a1 = 0xffffffff >> PMP_SHIFT;
+  //cfg = PMP_TOR << 8;
   // Give S-mode free rein of everything else.
   a2 = -1;
-  cfg |= (PMP_NAPOT | PMP_R | PMP_W | PMP_X) << 16;
+  //cfg |= (PMP_TOR | PMP_R | PMP_W | PMP_X) << 16;
+  cfg = 0;
+  cfg |= (PMP_TOR | PMP_R | PMP_W | PMP_X); 
   // No use for PMP 3 just yet.
   a3 = 0;
 
   // Plug it all in.
-  asm volatile ("csrw pmpaddr0, %[a0]\n\t"
-                "csrw pmpaddr1, %[a1]\n\t"
+  asm volatile ("csrw pmpaddr0, %[a1]\n\t"
+                "csrw pmpaddr1, %[a0]\n\t"
                 "csrw pmpaddr2, %[a2]\n\t"
                 "csrw pmpaddr3, %[a3]\n\t"
                 "csrw pmpcfg0, %[cfg]"
-                :: [a0] "r" (a0), [a1] "r" (a1), [a2] "r" (a2), [a3] "r" (a3),
+                :: [a1] "r" (a1), [a0] "r" (a0), [a2] "r" (a2), [a3] "r" (a3),
                    [cfg] "r" (cfg));
 }
 
 void boot_other_hart(uintptr_t unused __attribute__((unused)))
 {
   const void* entry;
+  printm("entry_point = 0x%08x,kernel_start=0x%08x, _payload_start=0x%08x\n", entry_point, kernel_start, &_payload_start);
+  disabled_hart_mask =0;
   do {
     entry = entry_point;
     mb();
@@ -107,22 +112,23 @@ void boot_other_hart(uintptr_t unused __attribute__((unused)))
 #ifdef BBL_BOOT_MACHINE
   enter_machine_mode(entry, hartid, dtb_output());
 #else /* Run bbl in supervisor mode */
-  protect_memory();
-  enter_supervisor_mode(entry, hartid, dtb_output());
+  //protect_memory();
+  enter_supervisor_mode(entry, hartid, 0x42000000);
 #endif
 }
 
 void boot_loader(uintptr_t dtb)
 {
-  filter_dtb(dtb);
-#ifdef PK_ENABLE_LOGO
+  //filter_dtb(dtb);
+//#ifdef PK_ENABLE_LOGO
   print_logo();
-#endif
+//#endif
 #ifdef PK_PRINT_DEVICE_TREE
   fdt_print(dtb_output());
 #endif
   mb();
   /* Use optional FDT preloaded external payload if present */
-  entry_point = kernel_start ? kernel_start : &_payload_start;
+  //entry_point = kernel_start ? kernel_start : &_payload_start;
+  entry_point = &_payload_start;
   boot_other_hart(0);
 }

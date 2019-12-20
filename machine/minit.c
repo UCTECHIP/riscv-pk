@@ -18,8 +18,8 @@ uintptr_t mem_size;
 volatile uint64_t* mtime;
 volatile uint32_t* plic_priorities;
 size_t plic_ndevs;
-void* kernel_start;
-void* kernel_end;
+void* kernel_start=NULL;
+void* kernel_end=NULL;
 
 static void mstatus_init()
 {
@@ -34,6 +34,10 @@ static void mstatus_init()
 
   // Enable software interrupts
   write_csr(mie, MIP_MSIP);
+
+  //Enable external interrupts
+  write_csr(sie, MIP_SEIP);
+  write_csr(mie, MIP_SEIP);
 
   // Disable paging
   if (supports_extension('S'))
@@ -53,12 +57,13 @@ static void delegate_traps()
     (1U << CAUSE_BREAKPOINT) |
     (1U << CAUSE_LOAD_PAGE_FAULT) |
     (1U << CAUSE_STORE_PAGE_FAULT) |
-    (1U << CAUSE_USER_ECALL);
+    (1U << CAUSE_USER_ECALL); 
 
   write_csr(mideleg, interrupts);
   write_csr(medeleg, exceptions);
   assert(read_csr(mideleg) == interrupts);
   assert(read_csr(medeleg) == exceptions);
+  
 }
 
 static void fp_init()
@@ -109,15 +114,15 @@ static void plic_init()
 
 static void prci_test()
 {
-  assert(!(read_csr(mip) & MIP_MSIP));
+  //assert(!(read_csr(mip) & MIP_MSIP));
   *HLS()->ipi = 1;
-  assert(read_csr(mip) & MIP_MSIP);
+  //assert(read_csr(mip) & MIP_MSIP);
   *HLS()->ipi = 0;
 
-  assert(!(read_csr(mip) & MIP_MTIP));
+  //assert(!(read_csr(mip) & MIP_MTIP));
   *HLS()->timecmp = 0;
-  assert(read_csr(mip) & MIP_MTIP);
-  *HLS()->timecmp = -1ULL;
+  //assert(read_csr(mip) & MIP_MTIP);
+  //*HLS()->timecmp = -1ULL;
 }
 
 static void hart_plic_init()
@@ -156,15 +161,15 @@ void init_first_hart(uintptr_t hartid, uintptr_t dtb)
 {
   // Confirm console as early as possible
   query_uart(dtb);
-  query_uart16550(dtb);
-  query_htif(dtb);
+  //query_uart16550(dtb);
+  //query_htif(dtb);
   printm("bbl loader\r\n");
 
   hart_init();
   hls_init(0); // this might get called again from parse_config_string
 
   // Find the power button early as well so die() works
-  query_finisher(dtb);
+  //query_finisher(dtb);
 
   query_mem(dtb);
   query_harts(dtb);
@@ -204,6 +209,7 @@ void setup_pmp(void)
 
 void enter_supervisor_mode(void (*fn)(uintptr_t), uintptr_t arg0, uintptr_t arg1)
 {
+  
   uintptr_t mstatus = read_csr(mstatus);
   mstatus = INSERT_FIELD(mstatus, MSTATUS_MPP, PRV_S);
   mstatus = INSERT_FIELD(mstatus, MSTATUS_MPIE, 0);

@@ -39,7 +39,7 @@ static uint32_t *fdt_scan_helper(
 
   child.parent = node;
   // these are the default cell counts, as per the FDT spec
-  child.address_cells = 2;
+  child.address_cells = 1;
   child.size_cells = 1;
   prop.node = node;
 
@@ -159,6 +159,7 @@ static void mem_prop(const struct fdt_scan_prop *prop, void *extra)
   if (!strcmp(prop->name, "device_type") && !strcmp((const char*)prop->value, "memory")) {
     scan->memory = 1;
   } else if (!strcmp(prop->name, "reg")) {
+    //if(scan->memory==1) printm("reg address = 0x%lX, len= 0x%lX \r\n", *prop->value, prop->len);
     scan->reg_value = prop->value;
     scan->reg_len = prop->len;
   }
@@ -196,6 +197,7 @@ void query_mem(uintptr_t fdt)
 
   mem_size = 0;
   fdt_scan(fdt, &cb);
+  mem_size = 0x4000000;
   assert (mem_size > 0);
 }
 
@@ -331,12 +333,12 @@ static void clint_done(const struct fdt_scan_node *node, void *extra)
 
   if (!scan->compat) return;
   assert (scan->reg != 0);
-  assert (scan->int_value && scan->int_len % 16 == 0);
-  assert (!scan->done); // only one clint
+  //assert (scan->int_value && scan->int_len % 16 == 0);
+  //assert (!scan->done); // only one clint
 
   scan->done = 1;
   mtime = (void*)((uintptr_t)scan->reg + 0xbff8);
-
+/*
   for (int index = 0; end - value > 0; ++index) {
     uint32_t phandle = bswap(value[0]);
     int hart;
@@ -349,7 +351,11 @@ static void clint_done(const struct fdt_scan_node *node, void *extra)
       hls->timecmp = (void*)((uintptr_t)scan->reg + 0x4000 + (index * 8));
     }
     value += 4;
-  }
+  }*/
+  
+  hls_t *hls = OTHER_HLS(0);
+  hls->ipi = (void*)((uintptr_t)scan->reg);
+  hls->timecmp = (void*)((uintptr_t)scan->reg + 0x4000);
 }
 
 void query_clint(uintptr_t fdt)
@@ -445,7 +451,7 @@ static void plic_done(const struct fdt_scan_node *node, void *extra)
     }
     value += 2;
   }
-#if 0
+#if 1
   printm("PLIC: prio %x devs %d\r\n", (uint32_t)(uintptr_t)plic_priorities, plic_ndevs);
   for (int i = 0; i < MAX_HARTS; ++i) {
     hls_t *hls = OTHER_HLS(i);
